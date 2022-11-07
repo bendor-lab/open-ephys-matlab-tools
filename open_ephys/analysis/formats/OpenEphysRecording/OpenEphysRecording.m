@@ -36,7 +36,7 @@ classdef OpenEphysRecording < Recording
 
         experimentId;
         recordSize;
-        
+        oeVersion;
         streams;
 
     end
@@ -65,37 +65,51 @@ classdef OpenEphysRecording < Recording
         end
 
         function self = loadStructure(self)
-
-            data = readstruct(fullfile(self.directory, 'structure.openephys'), "FileType", "xml");
-
+            continuousInfo = glob(fullfile(self.directory, ['*' self.experimentId '.openephys']));
+            data = readstruct(continuousInfo{1}, "FileType", "xml");
+            self.oeVersion = data.versionAttribute;
             self.streams = containers.Map;
             
-            streamData = data.RECORDING(self.recordingIndex).STREAM;
+            if (self.oeVersion < 0.5)
+                streamData = data.RECORDING.PROCESSOR;
+            else
+                streamData = data.RECORDING(self.recordingIndex).STREAM;
+            end
 
             for i = 1:length(streamData)
 
                 stream = {};
-
-                stream.nodeId = streamData(i).source_node_idAttribute;
-                stream.name = replace(streamData(i).nameAttribute, "_", "-");
-                stream.sampleRate = streamData(i).sample_rateAttribute;
+                if (self.oeVersion < 0.5)
+                    stream.nodeId = streamData.idAttribute;
+                    stream.name = "";
+                    stream.sampleRate = data.RECORDING.samplerateAttribute;
+                else
+                    stream.nodeId = streamData(i).source_node_idAttribute;
+                    stream.name = replace(replace(streamData(i).nameAttribute, "_", "-"), " ", "");
+                    stream.sampleRate = streamData(i).sample_rateAttribute;
+                end
 
                 stream.channels = {};
 
                 for j = 1:length(streamData(i).CHANNEL)
 
-                    data = {};
+                    cdata = {};
 
-                    data.name = streamData(i).CHANNEL(j).nameAttribute;
-                    data.bitVolts = streamData(i).CHANNEL(j).bitVoltsAttribute;
-                    data.position = streamData(i).CHANNEL(j).positionAttribute;
-                    data.filename = streamData(i).CHANNEL(j).filenameAttribute;
+                    cdata.name = streamData(i).CHANNEL(j).nameAttribute;
+                    cdata.num = str2double(strrep(cdata.name, "CH", ""));
+                    cdata.bitVolts = streamData(i).CHANNEL(j).bitVoltsAttribute;
+                    cdata.position = streamData(i).CHANNEL(j).positionAttribute;
+                    cdata.filename = streamData(i).CHANNEL(j).filenameAttribute;
 
-                    stream.channels{end+1} = data;
+                    stream.channels{end+1} = cdata;
 
                 end
 
-                stream.events.filename = streamData(i).EVENTS.filenameAttribute;
+                if (data.versionAttribute < 0.5)
+                    stream.events.filename = 'all_channels.events';
+                else
+                    stream.events.filename = streamData(i).EVENTS.filenameAttribute;
+                end
 
                 if (isfield(streamData(i), 'SPIKECHANNEL'))
 
@@ -115,7 +129,10 @@ classdef OpenEphysRecording < Recording
 
                 end
                 
-                nodeID = strcat(num2str(stream.nodeId), "_", stream.name);
+                nodeID = num2str(stream.nodeId);
+                if stream.name ~= ""
+                    nodeID = strcat(nodeID, "_", stream.name);
+                end
                 self.streams(nodeID) = stream;
                 
             end
@@ -134,13 +151,15 @@ classdef OpenEphysRecording < Recording
                 % Find all continuous files belonging to this stream
                 streamFiles = {};
                 for j = 1:length(files)
-                    if contains(files{j}, streamNames{i})
+                    if contains(files{j}, streamNames{i}) && isfile(files{j})
                         streamName = split(streamNames{i}, '_');
                         processorId = streamName{1};
                         streamFiles{end+1} = files{j};
                     end
                 end
-                
+                if isempty(streamFiles)
+                    continue
+                end
                 [timestamps, ~, ~] = self.loadContinuousFile(streamFiles{1});
 
                 stream = {};
@@ -178,6 +197,9 @@ classdef OpenEphysRecording < Recording
                 filename = fullfile(self.directory, self.streams(streamNames{i}).events.filename);
 
                 s = dir(filename);
+                if isempty(s)
+                    continue
+                end
                 if s.bytes == 1024
                     fprintf("Event file at %s does not contain any event data!\n", filename);
                     return
@@ -304,7 +326,11 @@ classdef OpenEphysRecording < Recording
                 dataSamples = reshape(data.Data, [floor(self.recordSize / 2), numRecords]);
                 
                 %Get mask for current recording
-                validRecords = dataSamples(6,:) == self.recordingIndex - 1;
+                recIndex = self.recordingIndex - 1;
+                if self.oeVersion < 0.5
+                    recIndex = self.recordingIndex;
+                end
+                validRecords = dataSamples(6,:) == recIndex;
                 
                 %Isolate valid samples and convert to big endian
                 validSamples = swapbytes(dataSamples(7:end-5,validRecords));
@@ -335,7 +361,11 @@ classdef OpenEphysRecording < Recording
             
             recordingNumber = data(15,:);
 
-            mask = recordingNumber == recordingIndex - 1;
+            recIndex = self.recordingIndex - 1;
+            if self.oeVersion < 0.5
+                recIndex = self.recordingIndex;
+            end
+            mask = recordingNumber == recIndex;
             
             timestamps = timestamps(mask);
             processorId = data(12,mask)';
@@ -374,7 +404,11 @@ classdef OpenEphysRecording < Recording
             data = memmapfile(filename, 'Writable', false, 'Offset', self.NUM_HEADER_BYTES, 'Format', 'uint16');
             data = reshape(data.Data, floor(SPIKE_RECORD_SIZE / 2), numSpikes);
 
-            mask = data(end,:) == recordingNumber - 1;
+            recIndex = self.recordingIndex - 1;
+            if self.oeVersion < 0.5
+                recIndex = self.recordingIndex;
+            end
+            mask = recordingNumber == recIndex;
 
             timestamps = timestamps(mask==1);
 
@@ -447,7 +481,7 @@ classdef OpenEphysRecording < Recording
                     experimentId = ['_' num2str(i)];
                 end
 
-                continuousInfo = glob(fullfile(directory, ['structure' experimentId '.openephys']));
+                continuousInfo = glob(fullfile(directory, ['*' experimentId '.openephys']));
 
                 foundRecording = false;
 
