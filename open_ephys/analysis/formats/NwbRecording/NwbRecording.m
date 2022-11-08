@@ -29,13 +29,9 @@ classdef NwbRecording < Recording
             self = self@Recording(directory, experimentIndex, recordingIndex);
             self.format = 'NWB';
 
-            self.loadContinuous();
-            self.loadEvents();
-            self.loadSpikes();
-
         end
 
-        function self = loadContinuous(self)
+        function self = loadContinuous(self, downsample_factor)
 
             dataFile = fullfile(self.directory, ['experiment' num2str(self.experimentIndex) '.nwb']);
 
@@ -61,7 +57,9 @@ classdef NwbRecording < Recording
 
                 stream.samples = h5read(dataFile, [streamInfo.Groups(i).Name '/data']);
                 stream.timestamps = h5read(dataFile, [streamInfo.Groups(i).Name '/timestamps']);
-
+                [stream.samples, stream.timestamps] = self.downsample_data(...
+                    stream.samples, stream.timestamps, downsample_factor);
+                
                 stream.metadata = {};
 
                 stream.metadata.startTimestamp = stream.timestamps(1);

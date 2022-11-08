@@ -266,7 +266,31 @@ classdef (Abstract) Recording < handle
             end
 
         end
-
+        
+        function self = convert2Volts(self)
+            streamNames = self.continuous.keys();
+            for i = 1:length(streamNames)
+                key = streamNames{i};
+                stream = self.continuous(key);
+                bitVolts = arrayfun(@(x) self.streams(key).channels{x}.bitVolts,...
+                                    1:numel(self.streams(key).channels));
+                stream.samples = double(stream.samples);
+                stream.samples = stream.samples .* bitVolts';
+                self.continuous(key) = stream;
+            end
+        end
+    end
+    
+    methods(Static)
+        function [data_down, ts_down] = downsample_data(data, ts, downsample_factor)
+            if downsample_factor == 1
+                data_down = data;
+                ts_down = ts;
+            else
+                data_down = resample(double(data), 1, downsample_factor);
+                ts_down = downsample(ts, downsample_factor);
+            end
+        end
     end
 
     methods (Abstract)
@@ -275,9 +299,9 @@ classdef (Abstract) Recording < handle
 
         loadEvents(self)
 
-        loadContinuous(self)
+        loadContinuous(self, downsample_factor)
 
-        %toString(self)
+        get_chan_nums(self, stream_key)
 
     end
 

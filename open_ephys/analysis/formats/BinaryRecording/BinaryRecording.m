@@ -37,13 +37,9 @@ classdef BinaryRecording < Recording
 
             self.info = jsondecode(fileread(fullfile(self.directory,'structure.oebin')));
 
-            self = self.loadContinuous();
-            self = self.loadEvents();
-            self = self.loadSpikes();
-
         end
 
-        function self = loadContinuous(self)
+        function self = loadContinuous(self, downsample_factor)
 
             Utils.log("Loading continuous data...");
 
@@ -84,7 +80,7 @@ classdef BinaryRecording < Recording
                 data = memmapfile(fullfile(directory, 'continuous.dat'), 'Format', 'int16');
 
                 stream.samples = reshape(data.Data, [stream.metadata.numChannels, length(data.Data) / stream.metadata.numChannels]);
-
+                [stream.samples, stream.timestamps] = self.downsample_data(stream.samples, stream.timestamps, downsample_factor);
                 stream.metadata.startTimestamp = syncMessages(stream.metadata.id);
 
                 self.continuous(stream.metadata.id) = stream;
@@ -107,20 +103,16 @@ classdef BinaryRecording < Recording
 
                 files = regexp(eventDirectories{i},filesep,'split');
 
+                fname = files{length(files)-2};
+                processorIdStart = regexp(fname, '1\d\d');
+                processorId = str2num(fname(processorIdStart:(processorIdStart+2)));
                 node = regexp(files{length(files)-2},'-','split');
-                processorName = node{1};
-                if length(node) > 2
-                    node = { node{1}, strjoin(node((2:length(node))), '-') };
-                end
-                fullId = strsplit(node{1,length(node)},'.');
-                processorId = str2num(fullId{1});
-                subprocessorId = str2num(fullId{2});
                 
                 channels = readNPY(fullfile(eventDirectories{i}, 'states.npy'));
                 sampleNumbers = readNPY(fullfile(eventDirectories{i}, 'sample_numbers.npy'));
                 timestamps = readNPY(fullfile(eventDirectories{i}, 'timestamps.npy'));
 
-                id = [processorName, '-', num2str(fullId{1}) '.' num2str(fullId{2})];
+                id = fname;
 
                 self.ttlEvents(id) = DataFrame(abs(channels), sampleNumbers, timestamps, processorId*ones(length(channels),1), streamIdx*ones(length(channels),1), channels > 0, ...
                     'VariableNames', {'channel','sample_number','timestamp','processor_id', 'stream_index', 'state'});
@@ -186,9 +178,10 @@ classdef BinaryRecording < Recording
                     % Found a processor string
                     %(e.g. "Start Time for File Reader (100) - Rhythm Data @ 40000 Hz: 80182")
 
-                    processorName = strjoin(message(4:(find(contains(message,'-'))-2)),'_');
-                    processorId = message{find(contains(message,'-'))-1}(2:(end-1));
-                    streamName = strjoin(message(find(contains(message,'-'))+1:find(contains(message,'@'))-1), ' ');
+                    processorMsgIdx = find(contains(message,'(') & contains(message,')'));
+                    processorName = strjoin(message(4:(processorMsgIdx-1)),'_');
+                    processorId = message{processorMsgIdx}(2:(end-1));
+                    streamName = strjoin(message(processorMsgIdx+2:find(contains(message,'@'))-1), ' ');
                     samplingFreqHz = message{find(contains(message,'@'))+1};
 
                     streamId = strcat(processorName, "-", processorId, ".", streamName);
@@ -201,6 +194,18 @@ classdef BinaryRecording < Recording
 
             Utils.log("Finished loading sync messages!");
 
+        end
+        
+        
+        function chan_nums = get_chan_nums(self, stream_key)
+            chan_nums = {};
+            for i = 1:size(self.info.continuous,1)
+                info_c = self.info.continuous(i);
+                if strcmp(info_c.stream_name, stream_key)
+                    chan_nums = 1:info_c.num_channels;
+                    break
+                end
+            end
         end
 
     end
