@@ -48,15 +48,20 @@ function [arrayShape, dataType, fortranOrder, littleEndian, totalHeaderLength, n
         dtNPY = r{1}{1};    
         
         littleEndian = ~strcmp(dtNPY(1), '>');
-        
-        dataType = dtypesMatlab{strcmp(dtNPY(2:3), dtypesNPY)};
+        arrayShape = [];
+        if dtNPY(2) == 'S'
+            dataType = 'char';
+            arrayShape = [str2double(dtNPY(3:end))];
+        else
+            dataType = dtypesMatlab{strcmp(dtNPY(2:3), dtypesNPY)};
+        end
             
         r = regexp(arrayFormat, '''fortran_order''\s*:\s*(\w+)', 'tokens');
         fortranOrder = strcmp(r{1}{1}, 'True');
         
         r = regexp(arrayFormat, '''shape''\s*:\s*\((.*?)\)', 'tokens');
         shapeStr = r{1}{1}; 
-        arrayShape = str2num(shapeStr(shapeStr~='L'));
+        arrayShape = [arrayShape str2num(shapeStr(shapeStr~='L'))];
     
         
         fclose(fid);
