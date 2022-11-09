@@ -61,7 +61,7 @@ function [arrayShape, dataType, fortranOrder, littleEndian, totalHeaderLength, n
         
         r = regexp(arrayFormat, '''shape''\s*:\s*\((.*?)\)', 'tokens');
         shapeStr = r{1}{1}; 
-        arrayShape = [arrayShape str2num(shapeStr(shapeStr~='L'))];
+        arrayShape = [str2num(shapeStr(shapeStr~='L')) arrayShape];
     
         
         fclose(fid);
