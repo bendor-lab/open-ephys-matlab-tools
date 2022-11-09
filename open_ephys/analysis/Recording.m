@@ -272,11 +272,25 @@ classdef (Abstract) Recording < handle
             for i = 1:length(streamNames)
                 key = streamNames{i};
                 stream = self.continuous(key);
-                bitVolts = arrayfun(@(x) self.streams(key).channels{x}.bitVolts,...
-                                    1:numel(self.streams(key).channels));
+                if isfield(self, 'streams')
+                    bitVolts = arrayfun(@(x) self.streams(key).channels{x}.bitVolts,...
+                                        1:numel(self.streams(key).channels));
+                        bitVolts = bitVolts';
+                else
+                    for j = 1:numel(self.info.continuous)
+                        stream_info = self.info.continuous(j);
+                        if strcmp(stream_info.folder_name(1:(end-1)), key)
+                            bitVolts = arrayfun(@(x) stream_info.channels(x).bit_volts,...
+                                                1:size(stream_info.channels, 1));
+                            break
+                        end
+                    end
+                end
+                %if numel(bitVolts) == size(stream.samples, 2)
                 stream.samples = double(stream.samples);
                 stream.samples = stream.samples .* bitVolts';
                 self.continuous(key) = stream;
+                %end
             end
         end
     end
@@ -287,7 +301,7 @@ classdef (Abstract) Recording < handle
                 data_down = data;
                 ts_down = ts;
             else
-                data_down = resample(double(data), 1, downsample_factor);
+                data_down = resample(double(data), 1, downsample_factor, 'Dimension', 2);
                 ts_down = downsample(ts, downsample_factor);
             end
         end
@@ -302,6 +316,8 @@ classdef (Abstract) Recording < handle
         loadContinuous(self, downsample_factor)
 
         get_chan_nums(self, stream_key)
+        
+        getSampleRate(self, stream_key)
 
     end
 

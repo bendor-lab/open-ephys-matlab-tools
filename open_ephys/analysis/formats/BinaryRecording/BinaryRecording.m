@@ -76,11 +76,46 @@ classdef BinaryRecording < Recording
                 end
 
                 stream.timestamps = readNPY(fullfile(directory, 'timestamps.npy'));
+                nts = length(stream.timestamps);
+                nchan = stream.metadata.numChannels;
+                
+                nts_per_chunk = 256 * 1024 * downsample_factor;
+                nchunks = ceil(nts / nts_per_chunk);
+                m = memmapfile(fullfile(directory, 'continuous.dat'), ...
+                    'Format', {'int16', [nchan nts_per_chunk], 't'},...
+                     'Offset', 0);
 
-                data = memmapfile(fullfile(directory, 'continuous.dat'), 'Format', 'int16');
-
-                stream.samples = reshape(data.Data, [stream.metadata.numChannels, length(data.Data) / stream.metadata.numChannels]);
-                [stream.samples, stream.timestamps] = self.downsample_data(stream.samples, stream.timestamps, downsample_factor);
+                samples_down = zeros(nchan, ceil(nts/downsample_factor), 'int16');
+                timestamps_down = downsample(stream.timestamps, downsample_factor);
+                part_i = 1;
+                nts_last_chunk = mod(nts, nts_per_chunk);
+                for chunk_i = 1:nchunks
+                    Utils.log(sprintf("Reading continuous data chunk %d out of %d", chunk_i, nchunks));
+                    % Read last chunk seperately into array fitting its size
+                    if chunk_i == nchunks && nts_last_chunk > 0
+                        m = memmapfile(fullfile(directory, 'continuous.dat'), ...
+                            'Format', {'int16', [nchan nts_last_chunk], 't'},...
+                            'Offset', (nchunks-1) * nts_per_chunk * nchan * 2); % 2 bytes per int16
+                        data = m.Data(1).t;
+                    else
+                        data = m.Data(chunk_i).t;
+                    end
+                    % Extend data to avoid edge effects in resampling
+                    resample_data = double([data repelem(data(:,end), 1, downsample_factor)]);
+                    samples_down_part = resample(resample_data, 1, downsample_factor, 'Dimension', 2);
+                    samples_down_part = samples_down_part(:, 1:(end-1));
+                    nsamples_down_part = size(samples_down_part, 2);
+                    part_idx = part_i : (part_i + nsamples_down_part - 1);
+                    samples_down(:,part_idx) = samples_down_part;
+                    part_i = part_i + nsamples_down_part;
+                end
+                if (part_i - 1) < numel(timestamps_down)
+                    warning('Read bin data from %d timepoints, expected %d', ...
+                        part_i - 1, numel(timestamps_down));
+                end
+                
+                stream.samples = samples_down;
+                stream.timestamps = timestamps_down;
                 stream.metadata.startTimestamp = syncMessages(stream.metadata.id);
 
                 self.continuous(stream.metadata.id) = stream;
@@ -200,14 +235,24 @@ classdef BinaryRecording < Recording
         function chan_nums = get_chan_nums(self, stream_key)
             chan_nums = {};
             for i = 1:size(self.info.continuous,1)
-                info_c = self.info.continuous(i);
-                if strcmp(info_c.stream_name, stream_key)
-                    chan_nums = 1:info_c.num_channels;
+                cinfo = self.info.continuous(i);
+                if strcmp(cinfo.folder_name(1:(end-1)), stream_key)
+                    chan_nums = 1:cinfo.num_channels;
                     break
                 end
             end
         end
 
+        function sample_rate = getSampleRate(self, stream_key)
+            for i = 1 : size(self.info.continuous, 1)
+                cinfo = self.info.continuous(i,:);
+                if strcmp(cinfo.folder_name(1:(end-1)), stream_key)
+                    sample_rate = cinfo.sample_rate;
+                    return
+                end
+            end
+            error('Didnt find stream %s', stream_key)
+        end
     end
 
     methods (Static)

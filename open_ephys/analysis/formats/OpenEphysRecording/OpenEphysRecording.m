@@ -453,6 +453,10 @@ classdef OpenEphysRecording < Recording
             chans_info = self.streams(stream_key).channels;
             chan_nums = arrayfun(@(x) chans_info{x}.num, 1:numel(self.streams(stream_key).channels));
         end
+        
+        function sample_rate = getSampleRate(self, stream_key)
+            sample_rate = self.streams(stream_key).sampleRate;
+        end
     end
 
     methods (Static)
