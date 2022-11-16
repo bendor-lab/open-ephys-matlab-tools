@@ -286,11 +286,13 @@ classdef (Abstract) Recording < handle
                         end
                     end
                 end
-                %if numel(bitVolts) == size(stream.samples, 2)
                 stream.samples = double(stream.samples);
-                stream.samples = stream.samples .* bitVolts';
+                if length(bitVolts) == size(stream.samples, 1)
+                    stream.samples = stream.samples .* bitVolts';
+                else
+                    stream.samples = stream.samples * bitVolts(1);
+                end
                 self.continuous(key) = stream;
-                %end
             end
         end
     end

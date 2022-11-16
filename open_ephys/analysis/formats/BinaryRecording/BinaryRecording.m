@@ -25,6 +25,7 @@ classdef BinaryRecording < Recording
     properties
 
         info
+        syncMessages
 
     end
 
@@ -36,93 +37,106 @@ classdef BinaryRecording < Recording
             self.format = 'Binary';
 
             self.info = jsondecode(fileread(fullfile(self.directory,'structure.oebin')));
-
+            self.syncMessages = [];
         end
 
         function self = loadContinuous(self, downsample_factor)
-
             Utils.log("Loading continuous data...");
 
-            syncMessages = self.loadSyncMessages();
+            Utils.log("Loading streams: ");
 
-            for i = 1:length(self.info.continuous)
+            for j = 1:length(self.info.continuous)
+                streamName = self.info.continuous(j).folder_name;
+                streamName = streamName(1:(end-1));
+                self.loadContinuousStream(downsample_factor, streamName);
+            end
+            Utils.log("Finished loading continuous data!");
+        end
+        
+        function self = loadContinuousStream(self, downsample_factor, streamName, channel_nums)
 
-                directory = fullfile(self.directory, 'continuous', self.info.continuous(i).folder_name);
+            folder_names = arrayfun(@(j) string(self.info.continuous(j).folder_name),...
+                1:numel(self.info.continuous));
+            i = find(contains(folder_names, streamName), 1);
+            
+            if isempty(i)
+                error('Could not find stream %s', streamName);
+            end
+            
+            if nargin < 4
+                channel_nums = 1:self.info.continuous(i).num_channels;
+            end
+            directory = fullfile(self.directory, 'continuous', self.info.continuous(i).folder_name);
 
-                Utils.log("Loading data from directory: ", directory);
+            Utils.log("Loading data from directory: ", directory);
 
-                stream = {};
+            stream = {};
 
-                stream.metadata.sampleRate = self.info.continuous(i).sample_rate;
-                stream.metadata.numChannels = self.info.continuous(i).num_channels;
-                stream.metadata.processorId = self.info.continuous(i).source_processor_id;
-                stream.metadata.streamName = self.info.continuous(i).folder_name(1:end-1);
-                
-                stream.metadata.names = {};
-                for j = 1:length(self.info.continuous(i).channels)
-                    stream.metadata.names{j} = self.info.continuous(i).channels(j).channel_name;
-                end
+            stream.metadata.sampleRate = self.info.continuous(i).sample_rate / downsample_factor;
+            stream.metadata.numChannels = self.info.continuous(i).num_channels;
+            stream.metadata.processorId = self.info.continuous(i).source_processor_id;
+            stream.metadata.streamName = self.info.continuous(i).folder_name(1:end-1);
 
-                Utils.log("Searching for start timestamp for stream: ");
-                Utils.log("    ", stream.metadata.streamName);
-
-                stream.metadata.id = num2str(stream.metadata.streamName);
-
-                Utils.log("Available streams: ");
-
-                availableKeys = keys(syncMessages);
-                for j = 1:length(keys(syncMessages))
-                    Utils.log("    ", availableKeys{j});
-                end
-
-                stream.timestamps = readNPY(fullfile(directory, 'timestamps.npy'));
-                nts = length(stream.timestamps);
-                nchan = stream.metadata.numChannels;
-                
-                nts_per_chunk = 256 * 1024 * downsample_factor;
-                nchunks = ceil(nts / nts_per_chunk);
-                m = memmapfile(fullfile(directory, 'continuous.dat'), ...
-                    'Format', {'int16', [nchan nts_per_chunk], 't'},...
-                     'Offset', 0);
-
-                samples_down = zeros(nchan, ceil(nts/downsample_factor), 'int16');
-                timestamps_down = downsample(stream.timestamps, downsample_factor);
-                part_i = 1;
-                nts_last_chunk = mod(nts, nts_per_chunk);
-                for chunk_i = 1:nchunks
-                    Utils.log(sprintf("Reading continuous data chunk %d out of %d", chunk_i, nchunks));
-                    % Read last chunk seperately into array fitting its size
-                    if chunk_i == nchunks && nts_last_chunk > 0
-                        m = memmapfile(fullfile(directory, 'continuous.dat'), ...
-                            'Format', {'int16', [nchan nts_last_chunk], 't'},...
-                            'Offset', (nchunks-1) * nts_per_chunk * nchan * 2); % 2 bytes per int16
-                        data = m.Data(1).t;
-                    else
-                        data = m.Data(chunk_i).t;
-                    end
-                    % Extend data to avoid edge effects in resampling
-                    resample_data = double([data repelem(data(:,end), 1, downsample_factor)]);
-                    samples_down_part = resample(resample_data, 1, downsample_factor, 'Dimension', 2);
-                    samples_down_part = samples_down_part(:, 1:(end-1));
-                    nsamples_down_part = size(samples_down_part, 2);
-                    part_idx = part_i : (part_i + nsamples_down_part - 1);
-                    samples_down(:,part_idx) = samples_down_part;
-                    part_i = part_i + nsamples_down_part;
-                end
-                if (part_i - 1) < numel(timestamps_down)
-                    warning('Read bin data from %d timepoints, expected %d', ...
-                        part_i - 1, numel(timestamps_down));
-                end
-                
-                stream.samples = samples_down;
-                stream.timestamps = timestamps_down;
-                stream.metadata.startTimestamp = syncMessages(stream.metadata.id);
-
-                self.continuous(stream.metadata.id) = stream;
-
+            stream.metadata.names = {};
+            for j = 1:length(self.info.continuous(i).channels)
+                stream.metadata.names{j} = self.info.continuous(i).channels(j).channel_name;
             end
 
-            Utils.log("Finished loading continuous data!");
+            Utils.log("Searching for start timestamp for stream: ");
+            Utils.log("    ", stream.metadata.streamName);
+
+            stream.metadata.id = num2str(stream.metadata.streamName);
+
+            stream.timestamps = readNPY(fullfile(directory, 'timestamps.npy'));
+            nts = length(stream.timestamps);
+            nchan = stream.metadata.numChannels;
+
+            if downsample_factor == 1
+                nts_per_chunk = 256 * 1024 * 5;
+            else
+                nts_per_chunk = lcm(256 * 1024, downsample_factor);
+            end
+            nchunks = ceil(nts / nts_per_chunk);
+            m = memmapfile(fullfile(directory, 'continuous.dat'), ...
+                'Format', {'int16', [nchan nts_per_chunk], 't'},...
+                 'Offset', 0);
+
+            samples_down = zeros(numel(channel_nums), ceil(nts/downsample_factor), 'int16');
+            timestamps_down = downsample(stream.timestamps, downsample_factor);
+            part_i = 1;
+            nts_last_chunk = mod(nts, nts_per_chunk);
+            for chunk_i = 1:nchunks
+                Utils.log(sprintf("Reading continuous data chunk %d out of %d", chunk_i, nchunks));
+                % Read last chunk seperately into array fitting its size
+                if chunk_i == nchunks && nts_last_chunk > 0
+                    m = memmapfile(fullfile(directory, 'continuous.dat'), ...
+                        'Format', {'int16', [nchan nts_last_chunk], 't'},...
+                        'Offset', (nchunks-1) * nts_per_chunk * nchan * 2); % 2 bytes per int16
+                    data = m.Data(1).t;
+                else
+                    data = m.Data(chunk_i).t;
+                end
+                data = data(channel_nums, :);
+                % Extend data to avoid edge effects in resampling
+                resample_data = double([data repelem(data(:,end), 1, downsample_factor)]);
+                samples_down_part = resample(resample_data, 1, downsample_factor, 'Dimension', 2);
+                samples_down_part = samples_down_part(:, 1:(end-1));
+                nsamples_down_part = size(samples_down_part, 2);
+                part_idx = part_i : (part_i + nsamples_down_part - 1);
+                samples_down(:,part_idx) = samples_down_part;
+                part_i = part_i + nsamples_down_part;
+            end
+            if (part_i - 1) < numel(timestamps_down)
+                warning('Read bin data from %d timepoints, expected %d', ...
+                    part_i - 1, numel(timestamps_down));
+            end
+
+            stream.samples = samples_down;
+            stream.timestamps = timestamps_down;
+            syncMessages = self.loadSyncMessages();
+            stream.metadata.startTimestamp = syncMessages(stream.metadata.id);
+
+            self.continuous(stream.metadata.id) = stream;
 
         end
 
@@ -191,6 +205,11 @@ classdef BinaryRecording < Recording
         end
 
         function syncMessages = loadSyncMessages(self)
+            
+            if ~isempty(self.syncMessages)
+                syncMessages = self.syncMessages;
+                return
+            end
 
             Utils.log("Loading sync messages...");
 
@@ -228,7 +247,7 @@ classdef BinaryRecording < Recording
             end
 
             Utils.log("Finished loading sync messages!");
-
+            self.syncMessages = syncMessages;
         end
         
         
