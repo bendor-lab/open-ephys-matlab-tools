@@ -38,6 +38,7 @@ classdef OpenEphysRecording < Recording
         recordSize;
         oeVersion;
         streams;
+        continuousFiles;
 
     end
 
@@ -57,7 +58,7 @@ classdef OpenEphysRecording < Recording
             end
 
             self = self.loadStructure();
-
+            self.continuousFiles = self.findContinuousFiles();
         end
 
         function self = loadStructure(self)
@@ -140,56 +141,55 @@ classdef OpenEphysRecording < Recording
         end
 
         function self = loadContinuous(self, downsample_factor)
-
-            % Get list of all continuous files
-            files = self.findContinuousFiles();
-
             streamNames = self.streams.keys();
             for i = 1:length(streamNames)
-
-                % Find all continuous files belonging to this stream
-                streamFiles = {};
-                for j = 1:length(files)
-                    if contains(files{j}, streamNames{i}) && isfile(files{j})
-                        streamName = split(streamNames{i}, '_');
-                        processorId = streamName{1};
-                        streamFiles{end+1} = files{j};
-                    end
-                end
-                if isempty(streamFiles)
-                    continue
-                end
-                [timestamps, ~, ~] = self.loadContinuousFile(streamFiles{1}, downsample_factor);
-                stream = {};
-
-                stream.metadata = {};
-
-                stream.metadata.names = [];
-                stream.metadata.processorId = processorId;
-                stream.metadata.startTimestamp = timestamps(1);
-                stream.metadata.sampleRate = self.streams(processorId).sampleRate / downsample_factor;
-
-                stream.timestamps = timestamps;
-
-                stream.samples = zeros(length(streamFiles), length(timestamps));
-
-                channels = zeros(1,numel(streamFiles));
-                for j = 1:length(streamFiles)
-            
-                    [~, samples, header] = self.loadContinuousFile(streamFiles{j}, downsample_factor);
-
-                    stream.samples(j,:) = samples';
-                    chan_name = header('channel');
-                    chan_name = chan_name(4:(end-1));
-                    channels(j) = int16(str2double(chan_name));
-                end
-                stream.metadata.channels = channels;
-                self.continuous(streamNames{i}) = stream;
-
+                self.loadContinuousStream(downsample_factor, streamNames{i})
             end
-
         end
 
+        function self = loadContinuousStream(self, downsample_factor, streamLongName)
+            [streamFiles, processorId] = self.findStreamFiles(streamLongName);
+            if isempty(streamFiles)
+                return
+            end
+            [timestamps, ~, ~] = self.loadContinuousFile(streamFiles{1}, downsample_factor);
+            stream = {};
+
+            stream.metadata = {};
+
+            stream.metadata.names = [];
+            stream.metadata.processorId = processorId;
+            stream.metadata.startTimestamp = timestamps(1);
+            stream.metadata.sampleRate = self.streams(processorId).sampleRate / downsample_factor;
+
+            stream.timestamps = timestamps;
+
+            stream.samples = zeros(length(streamFiles), length(timestamps));
+
+            channels = zeros(1,numel(streamFiles));
+            for j = 1:length(streamFiles)
+
+                [~, samples, header] = self.loadContinuousFile(streamFiles{j}, downsample_factor);
+
+                stream.samples(j,:) = samples';
+                chan_name = header('channel');
+                chan_name = chan_name(4:(end-1));
+                channels(j) = int16(str2double(chan_name));
+            end
+            stream.metadata.channels = channels;
+            self.continuous(streamLongName) = stream;
+        end
+
+        function timestamps = readStreamTimestamps(self, stream_key)
+            [streamFiles, ~] = self.findStreamFiles(stream_key);
+            timestamps = [];
+            if isempty(streamFiles)
+                warning('No files found for stream %s', stream_key)
+                return
+            end
+            [timestamps, ~, ~] = self.loadContinuousFile(streamFiles{1}, 1);
+        end
+        
         function self = loadEvents(self)
 
             streamNames = self.streams.keys();
@@ -265,6 +265,18 @@ classdef OpenEphysRecording < Recording
                 end
             end
 
+        end
+        
+        function [streamFiles, processorId] = findStreamFiles(self, stream_key)
+            processorId = split(stream_key, '_');
+            processorId = processorId{1};
+            streamFiles = {};
+            for j = 1:length(self.continuousFiles)
+                if contains(self.continuousFiles{j}, stream_key) && ...
+                        isfile(self.continuousFiles{j})
+                    streamFiles{end+1} = self.continuousFiles{j};
+                end
+            end
         end
 
         function files = findSpikeFiles(self, fileType)

@@ -140,6 +140,14 @@ classdef BinaryRecording < Recording
 
         end
 
+        function timestamps = readStreamTimestamps(self, stream_key)
+            folder_names = arrayfun(@(j) string(self.info.continuous(j).folder_name),...
+                1:numel(self.info.continuous));
+            i = find(contains(folder_names, stream_key), 1);
+            directory = fullfile(self.directory, 'continuous', self.info.continuous(i).folder_name);
+            timestamps = readNPY(fullfile(directory, 'timestamps.npy'));
+        end
+        
         function self = loadEvents(self)
 
             Utils.log("Loading event data!");

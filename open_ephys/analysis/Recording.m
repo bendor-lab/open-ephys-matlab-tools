@@ -319,6 +319,8 @@ classdef (Abstract) Recording < handle
         loadEvents(self)
 
         loadContinuous(self, downsample_factor)
+        
+        readStreamTimestamps(self, stream_key)
 
         get_chan_nums(self, stream_key)
         
