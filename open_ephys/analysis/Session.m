@@ -70,6 +70,9 @@ classdef Session < handle
                 self.recordNodes{end+1} = RecordNode(paths{i});
             end
 
+            if isempty(paths)
+                self.recordNodes{1} = RecordNode(self.directory);
+            end
 
         end
 

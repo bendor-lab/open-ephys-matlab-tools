@@ -145,7 +145,6 @@ classdef OpenEphysRecording < Recording
             files = self.findContinuousFiles();
 
             streamNames = self.streams.keys();
-
             for i = 1:length(streamNames)
 
                 % Find all continuous files belonging to this stream
@@ -161,7 +160,6 @@ classdef OpenEphysRecording < Recording
                     continue
                 end
                 [timestamps, ~, ~] = self.loadContinuousFile(streamFiles{1}, downsample_factor);
-
                 stream = {};
 
                 stream.metadata = {};
@@ -169,19 +167,23 @@ classdef OpenEphysRecording < Recording
                 stream.metadata.names = [];
                 stream.metadata.processorId = processorId;
                 stream.metadata.startTimestamp = timestamps(1);
+                stream.metadata.sampleRate = self.streams(processorId).sampleRate / downsample_factor;
 
                 stream.timestamps = timestamps;
 
                 stream.samples = zeros(length(streamFiles), length(timestamps));
 
+                channels = zeros(1,numel(streamFiles));
                 for j = 1:length(streamFiles)
             
-                    [~, samples, ~] = self.loadContinuousFile(streamFiles{j}, downsample_factor);
+                    [~, samples, header] = self.loadContinuousFile(streamFiles{j}, downsample_factor);
 
                     stream.samples(j,:) = samples';
-
+                    chan_name = header('channel');
+                    chan_name = chan_name(4:(end-1));
+                    channels(j) = int16(str2double(chan_name));
                 end
-
+                stream.metadata.channels = channels;
                 self.continuous(streamNames{i}) = stream;
 
             end
@@ -206,7 +208,7 @@ classdef OpenEphysRecording < Recording
                 end
     
                 [timestamps, processorId, state, channel, header] = self.loadEventsFile(filename);
-    
+                timestamps = double(timestamps) / str2double(header('sampleRate'));
                 self.ttlEvents(streamNames{i}) = DataFrame(channel + 1, timestamps, processorId, state, 'VariableNames', {'channel','timestamp','nodeID','state'});
 
             end 
@@ -347,6 +349,7 @@ classdef OpenEphysRecording < Recording
             end
             
             [samples, timestamps] = self.downsample_data(samples, timestamps, downsample_factor);
+            timestamps = double(timestamps) / str2double(header('sampleRate'));
         end
 
         function [timestamps, processorId, state, channel, header ] = loadEventsFile(self, filename)
@@ -450,12 +453,11 @@ classdef OpenEphysRecording < Recording
         end
         
         function chan_nums = get_chan_nums(self, stream_key)
-            chans_info = self.streams(stream_key).channels;
-            chan_nums = arrayfun(@(x) chans_info{x}.num, 1:numel(self.streams(stream_key).channels));
+            chan_nums = self.continuous(stream_key).metadata.channels;
         end
         
         function sample_rate = getSampleRate(self, stream_key)
-            sample_rate = self.streams(stream_key).sampleRate;
+            sample_rate = self.continuous(stream_key).metadata.sampleRate;
         end
     end
 

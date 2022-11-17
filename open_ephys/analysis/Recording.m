@@ -272,7 +272,7 @@ classdef (Abstract) Recording < handle
             for i = 1:length(streamNames)
                 key = streamNames{i};
                 stream = self.continuous(key);
-                if isfield(self, 'streams')
+                if isprop(self, 'streams')
                     bitVolts = arrayfun(@(x) self.streams(key).channels{x}.bitVolts,...
                                         1:numel(self.streams(key).channels));
                         bitVolts = bitVolts';
@@ -288,7 +288,10 @@ classdef (Abstract) Recording < handle
                 end
                 stream.samples = double(stream.samples);
                 if length(bitVolts) == size(stream.samples, 1)
-                    stream.samples = stream.samples .* bitVolts';
+                    if size(stream.samples, 1) == size(bitVolts, 2)
+                        bitVolts = bitVolts';
+                    end
+                    stream.samples = stream.samples .* bitVolts;
                 else
                     stream.samples = stream.samples * bitVolts(1);
                 end
