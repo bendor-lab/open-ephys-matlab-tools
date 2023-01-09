@@ -41,16 +41,16 @@ classdef BinaryRecording < Recording
         end
 
         function self = loadContinuous(self, downsample_factor)
-            Utils.log("Loading continuous data...");
+            Utils.logger().info("Loading continuous data...");
 
-            Utils.log("Loading streams: ");
+            Utils.logger().debug("Loading streams: ");
 
             for j = 1:length(self.info.continuous)
                 streamName = self.info.continuous(j).folder_name;
                 streamName = streamName(1:(end-1));
                 self.loadContinuousStream(downsample_factor, streamName);
             end
-            Utils.log("Finished loading continuous data!");
+            Utils.logger().debug("Finished loading continuous data!");
         end
         
         function self = loadContinuousStream(self, downsample_factor, streamName, channel_nums)
@@ -68,7 +68,7 @@ classdef BinaryRecording < Recording
             end
             directory = fullfile(self.directory, 'continuous', self.info.continuous(i).folder_name);
 
-            Utils.log("Loading data from directory: ", directory);
+            Utils.logger().info("Loading continuous data from directory: ", directory);
 
             stream = {};
 
@@ -82,8 +82,8 @@ classdef BinaryRecording < Recording
                 stream.metadata.names{j} = self.info.continuous(i).channels(j).channel_name;
             end
 
-            Utils.log("Searching for start timestamp for stream: ");
-            Utils.log("    ", stream.metadata.streamName);
+            Utils.logger().debug("Searching for start timestamp for stream: ");
+            Utils.logger().debug("    ", stream.metadata.streamName);
 
             stream.metadata.id = num2str(stream.metadata.streamName);
 
@@ -106,7 +106,7 @@ classdef BinaryRecording < Recording
             part_i = 1;
             nts_last_chunk = mod(nts, nts_per_chunk);
             for chunk_i = 1:nchunks
-                Utils.log(sprintf("Reading continuous data chunk %d out of %d", chunk_i, nchunks));
+                Utils.logger().debug(sprintf("Reading continuous data chunk %d out of %d", chunk_i, nchunks));
                 % Read last chunk seperately into array fitting its size
                 if chunk_i == nchunks && nts_last_chunk > 0
                     m = memmapfile(fullfile(directory, 'continuous.dat'), ...
@@ -150,7 +150,7 @@ classdef BinaryRecording < Recording
         
         function self = loadEvents(self)
 
-            Utils.log("Loading event data!");
+            Utils.logger().info("Loading event data...");
 
             eventDirectories = glob(fullfile(self.directory, 'events', '*', 'TTL*'));
             
@@ -178,7 +178,7 @@ classdef BinaryRecording < Recording
 
             end
 
-            Utils.log("Finished loading event data!");
+            Utils.logger().debug("Finished loading event data!");
 
             if length(self.ttlEvents.keys) > 0
                 %TODO: Concatenate data frames?
@@ -188,7 +188,7 @@ classdef BinaryRecording < Recording
 
         function self = loadSpikes(self)
 
-            Utils.log("Loading spike data!");
+            Utils.logger().info("Loading spike data...");
 
             for i = 1:length(self.info.spikes)
 
@@ -208,7 +208,7 @@ classdef BinaryRecording < Recording
 
             end
 
-            Utils.log("Finished loading spike data!");
+            Utils.logger().debug("Finished loading spike data!");
 
         end
 
@@ -219,7 +219,7 @@ classdef BinaryRecording < Recording
                 return
             end
 
-            Utils.log("Loading sync messages...");
+            Utils.logger().debug("Loading sync messages...");
 
             syncMessages = containers.Map();
 
@@ -254,7 +254,7 @@ classdef BinaryRecording < Recording
 
             end
 
-            Utils.log("Finished loading sync messages!");
+            Utils.logger().debug("Finished loading sync messages!");
             self.syncMessages = syncMessages;
         end
         
@@ -298,7 +298,7 @@ classdef BinaryRecording < Recording
 
         function recordings = detectRecordings(directory)
 
-            Utils.log("Searching for recordings...");
+            Utils.logger().debug("Searching for recordings...");
 
             recordings = {};
 
@@ -316,7 +316,7 @@ classdef BinaryRecording < Recording
 
             end
 
-            Utils.log("Finished searching for recordings!");
+            Utils.logger().debug("Finished searching for recordings!");
             
         end
         

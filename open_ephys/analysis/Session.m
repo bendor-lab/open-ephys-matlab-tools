@@ -55,7 +55,7 @@ classdef Session < handle
 
             self.directory = directory;
 
-            Utils.log("Searching directory: ", directory);
+            Utils.logger().debug("Searching directory: ", directory);
 
             self.recordNodes = {};
             self.detectRecordNodes();

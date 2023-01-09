@@ -2,19 +2,82 @@ classdef Utils
     %UTILS Contains helper functions 
     %   Detailed explanation goes here
     
-    properties
+    properties (Constant)
+        DEBUG = 0;
+        INFO = 1;
+        WARN = 2;
     end
     
+    properties
+        loglevel;
+    end
+    
+    methods(Access = private)
+        function obj = Utils(loglevel)
+            obj.loglevel = loglevel;
+        end
+    end
+    
+   
     methods(Static)
-        function singleton = Utils()
+        function singleton = logger(varargin)
+             persistent localObj;
+             persistent loglevel;
+             
+             if isempty(loglevel)
+                 loglevel = Utils.INFO;
+             end
+             
+             changed_loglevel = false;
+             if ~isempty(varargin)
+                 loglevel = varargin{1};
+                 changed_loglevel = true;
+             end 
+             
+             if isempty(localObj) || changed_loglevel
+                  localObj = Utils(loglevel);
+             end
+             singleton = localObj;
         end
 
         function log(varargin)
-            fprintf("[DEBUG] ");
+            Utils.logger().info(varargin{:});
+        end
+    end
+    
+    methods
+        
+        function msg(self, loglevel, varargin)
+            if self.loglevel > loglevel
+                return
+            end
+            
+            switch loglevel
+            case 0
+               loglevelstr = "DEBUG";
+            case 1
+                loglevelstr = 'INFO';
+            case 2
+                loglevelstr = 'WARN';
+            end
+            
+            fprintf("[%s] ", loglevelstr);
             for i = 1:length(varargin)
                 fprintf('%s ', varargin{i});
             end
             fprintf("\n");
+        end
+        
+        function debug(self, varargin)
+            self.msg(self.DEBUG, varargin{:});
+        end
+        
+        function info(self, varargin)
+            self.msg(self.INFO, varargin{:});
+        end
+        
+        function warn(self, varargin)
+            self.msg(self.WARN, varargin{:});
         end
         
         function latest_recording = getLatestRecording(dataPath)

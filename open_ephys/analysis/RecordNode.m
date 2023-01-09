@@ -96,10 +96,10 @@ classdef RecordNode < handle
             case 'NWB'
                 self.recordings = NwbRecording.detectRecordings(self.directory);
             otherwise
-                Utils().log('A valid format has not been detected!');
+                Utils.logger().debug('A valid format has not been detected!');
             end
 
-            Utils().log("Detected", num2str(length(self.recordings)), "recordings.");
+            Utils.logger().debug("Detected", num2str(length(self.recordings)), "recordings.");
 
         end
 
