@@ -52,6 +52,7 @@ classdef RecordNode < handle
         
         directory
         name
+        sessionName
         format
         recordings
 
@@ -65,6 +66,7 @@ classdef RecordNode < handle
 
             folder = regexp(self.directory,filesep,'split');
             self.name = folder{end-1};
+            self.sessionName = folder{end-2};
 
             self.format = '';
             self.detectFormat();

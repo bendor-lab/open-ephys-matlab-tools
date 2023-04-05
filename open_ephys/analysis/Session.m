@@ -52,9 +52,7 @@ classdef Session < handle
     methods 
 
         function self = Session(directory) 
-
             self.directory = directory;
-
             Utils.logger().debug("Searching directory: ", directory);
 
             self.recordNodes = {};

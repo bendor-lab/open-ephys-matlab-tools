@@ -26,6 +26,7 @@ classdef BinaryRecording < Recording
 
         info
         syncMessages
+        timestamps
 
     end
 
@@ -38,6 +39,7 @@ classdef BinaryRecording < Recording
 
             self.info = jsondecode(fileread(fullfile(self.directory,'structure.oebin')));
             self.syncMessages = [];
+            self.timestamps = [];
         end
 
         function self = loadContinuous(self, downsample_factor)
@@ -55,6 +57,10 @@ classdef BinaryRecording < Recording
         
         function self = loadContinuousStream(self, downsample_factor, streamName, channel_nums)
 
+            if ismember(streamName, self.continuous.keys())
+                return;
+            end
+            
             folder_names = arrayfun(@(j) string(self.info.continuous(j).folder_name),...
                 1:numel(self.info.continuous));
             i = find(contains(folder_names, streamName), 1);
@@ -141,14 +147,23 @@ classdef BinaryRecording < Recording
         end
 
         function timestamps = readStreamTimestamps(self, stream_key)
+            if ~isempty(self.timestamps)
+                timestamps = self.timestamps;
+                return
+            end
+            
             folder_names = arrayfun(@(j) string(self.info.continuous(j).folder_name),...
                 1:numel(self.info.continuous));
             i = find(contains(folder_names, stream_key), 1);
             directory = fullfile(self.directory, 'continuous', self.info.continuous(i).folder_name);
             timestamps = readNPY(fullfile(directory, 'timestamps.npy'));
+            self.timestamps = timestamps;
         end
         
         function self = loadEvents(self)
+            if ~isempty(self.ttlEvents)
+                return;
+            end
 
             Utils.logger().info("Loading event data...");
 
@@ -188,6 +203,10 @@ classdef BinaryRecording < Recording
 
         function self = loadSpikes(self)
 
+            if ~isempty(self.spikes)
+                return;
+            end
+            
             Utils.logger().info("Loading spike data...");
 
             for i = 1:length(self.info.spikes)

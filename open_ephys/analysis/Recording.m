@@ -60,6 +60,7 @@ classdef (Abstract) Recording < handle
         format
 
         directory
+        sessionName
         experimentIndex
         recordingIndex
 
@@ -76,6 +77,8 @@ classdef (Abstract) Recording < handle
         function self = Recording(directory, experimentIndex, recordingIndex)
             
             self.directory = directory;
+            folder = regexp(self.directory,filesep,'split');
+            self.sessionName = folder{end-4};
             self.experimentIndex = experimentIndex;
             self.recordingIndex = recordingIndex;
 
