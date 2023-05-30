@@ -78,7 +78,11 @@ classdef (Abstract) Recording < handle
             
             self.directory = directory;
             folder = regexp(self.directory,filesep,'split');
-            self.sessionName = folder{end-4};
+            if startsWith('recording', folder{end})
+                self.sessionName = folder{end-4};
+            else
+                 self.sessionName = folder{end};
+            end
             self.experimentIndex = experimentIndex;
             self.recordingIndex = recordingIndex;
 

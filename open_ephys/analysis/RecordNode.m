@@ -65,8 +65,13 @@ classdef RecordNode < handle
             self.directory = directory;
 
             folder = regexp(self.directory,filesep,'split');
-            self.name = folder{end-1};
-            self.sessionName = folder{end-2};
+            if startsWith('Record Node', folder{end - 1})
+                self.name = folder{end-1};
+                self.sessionName = folder{end-2};
+            else
+                self.name = 'Record Node 100';
+                self.sessionName = folder{end};
+            end
 
             self.format = '';
             self.detectFormat();
