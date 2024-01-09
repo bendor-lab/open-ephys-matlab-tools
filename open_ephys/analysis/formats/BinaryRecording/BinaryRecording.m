@@ -94,8 +94,14 @@ classdef BinaryRecording < Recording
             stream.metadata.id = num2str(stream.metadata.streamName);
 
             stream.timestamps = readNPY(fullfile(directory, 'timestamps.npy'));
+            stream.samples = [];
             nts = length(stream.timestamps);
             nchan = stream.metadata.numChannels;
+            
+            if isempty(stream.timestamps)
+                self.continuous(stream.metadata.id) = stream;
+                return
+            end
 
             if downsample_factor == 1
                 nts_per_chunk = 256 * 1024 * 5;
@@ -125,7 +131,11 @@ classdef BinaryRecording < Recording
                 data = data(channel_nums, :);
                 % Extend data to avoid edge effects in resampling
                 resample_data = double([data repelem(data(:,end), 1, downsample_factor)]);
-                samples_down_part = resample(resample_data, 1, downsample_factor, 'Dimension', 2);
+                if downsample_factor == 1
+                    samples_down_part = resample_data;
+                else
+                    samples_down_part = resample(resample_data, 1, downsample_factor, 'Dimension', 2);
+                end
                 samples_down_part = samples_down_part(:, 1:(end-1));
                 nsamples_down_part = size(samples_down_part, 2);
                 part_idx = part_i : (part_i + nsamples_down_part - 1);
