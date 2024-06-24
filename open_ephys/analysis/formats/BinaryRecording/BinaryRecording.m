@@ -54,38 +54,54 @@ classdef BinaryRecording < Recording
             end
             Utils.logger().debug("Finished loading continuous data!");
         end
-        
-        function self = loadContinuousStream(self, downsample_factor, streamName, channel_nums)
-
-            if ismember(streamName, self.continuous.keys())
-                return;
-            end
-            
+              
+        function stream_info = getStreamInfo(self, streamName)
             folder_names = arrayfun(@(j) string(self.info.continuous(j).folder_name),...
                 1:numel(self.info.continuous));
             i = find(contains(folder_names, streamName), 1);
-            
             if isempty(i)
                 error('Could not find stream %s', streamName);
             end
             
-            if nargin < 4
-                channel_nums = 1:self.info.continuous(i).num_channels;
+            stream_info = self.info.continuous(i);
+        end
+        
+        function self = loadContinuousStream(self, downsample_factor, streamName, ...
+                channel_nums, stream_offset_sec, stream_dur_sec)
+            if ismember(streamName, self.continuous.keys())
+                return;
             end
-            directory = fullfile(self.directory, 'continuous', self.info.continuous(i).folder_name);
+            
+            stream_info = self.getStreamInfo(streamName);
+            
+            if nargin < 4
+                channel_nums = 1:stream_info.num_channels;
+            end
+            if isempty(channel_nums)
+                warning('No channels to load')
+                return
+            end
+            if nargin < 5
+                stream_offset_sec = -1;
+            end
+            if nargin < 6
+                stream_dur_sec = -1;
+            end
+            
+            directory = fullfile(self.directory, 'continuous', stream_info.folder_name);
 
             Utils.logger().info("Loading continuous data from directory: ", directory);
 
             stream = {};
 
-            stream.metadata.sampleRate = self.info.continuous(i).sample_rate / downsample_factor;
-            stream.metadata.numChannels = self.info.continuous(i).num_channels;
-            stream.metadata.processorId = self.info.continuous(i).source_processor_id;
-            stream.metadata.streamName = self.info.continuous(i).folder_name(1:end-1);
+            stream.metadata.sampleRate = stream_info.sample_rate / downsample_factor;
+            stream.metadata.numChannels = stream_info.num_channels;
+            stream.metadata.processorId = stream_info.source_processor_id;
+            stream.metadata.streamName = stream_info.folder_name(1:end-1);
 
             stream.metadata.names = {};
-            for j = 1:length(self.info.continuous(i).channels)
-                stream.metadata.names{j} = self.info.continuous(i).channels(j).channel_name;
+            for j = 1:length(stream_info.channels)
+                stream.metadata.names{j} = stream_info.channels(j).channel_name;
             end
 
             Utils.logger().debug("Searching for start timestamp for stream: ");
@@ -93,7 +109,20 @@ classdef BinaryRecording < Recording
 
             stream.metadata.id = num2str(stream.metadata.streamName);
 
-            stream.timestamps = readNPY(fullfile(directory, 'timestamps.npy'));
+            all_timestamps = readNPY(fullfile(directory, 'timestamps.npy'));
+            if stream_offset_sec < 0
+                samples_offset = 1;
+            else
+                samples_offset = find(all_timestamps >= stream_offset_sec, 1);
+            end
+            
+            if stream_dur_sec < 0
+                samples_end = numel(all_timestamps);
+            else
+                samples_end = find(all_timestamps <= (all_timestamps(samples_offset) + stream_dur_sec),...
+                    1, 'last');
+            end
+            stream.timestamps = all_timestamps(samples_offset:samples_end);
             stream.samples = [];
             nts = length(stream.timestamps);
             nchan = stream.metadata.numChannels;
@@ -111,7 +140,7 @@ classdef BinaryRecording < Recording
             nchunks = ceil(nts / nts_per_chunk);
             m = memmapfile(fullfile(directory, 'continuous.dat'), ...
                 'Format', {'int16', [nchan nts_per_chunk], 't'},...
-                 'Offset', 0);
+                 'Offset', samples_offset - 1); % make zero indexed
 
             samples_down = zeros(numel(channel_nums), ceil(nts/downsample_factor), 'int16');
             timestamps_down = downsample(stream.timestamps, downsample_factor);
